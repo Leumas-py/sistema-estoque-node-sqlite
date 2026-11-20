@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Controle de Estoque</title>
+  <style>
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+    body { margin: 0; padding: 24px; background: #0f172a; color: #e2e8f0; }
+    .container { max-width: 960px; margin: 0 auto; display: grid; gap: 20px; }
+    h1 { margin: 0; font-size: 1.6rem; }
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 16px; }
+    .card h2 { margin: 0 0 12px; font-size: 1.05rem; color: #f8fafc; }
+    label { display: block; font-size: 0.85rem; color: #94a3b8; margin-top: 10px; }
+    input, select {
+      width: 100%; padding: 8px 10px; margin-top: 4px; border-radius: 6px;
+      border: 1px solid #475569; background: #0f172a; color: #f8fafc;
+    }
+    .acoes { display: flex; gap: 10px; margin-top: 14px; }
+    button {
+      cursor: pointer; border: none; border-radius: 6px; padding: 9px 14px;
+      font-weight: 600; background: #3b82f6; color: #fff;
+    }
+    button:hover { background: #2563eb; }
+    button.saida { background: #dc2626; }
+    button.saida:hover { background: #b91c1c; }
+    button.entrada { background: #16a34a; }
+    button.entrada:hover { background: #15803d; }
+    #aviso { padding: 10px 14px; border-radius: 8px; display: none; font-size: 0.9rem; }
+    #aviso.ok { display: block; background: #14532d; color: #bbf7d0; }
+    #aviso.erro { display: block; background: #7f1d1d; color: #fecaca; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid #334155; font-size: 0.9rem; }
+    th { color: #94a3b8; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Sistema de Estoque</h1>
+    <div id="aviso"></div>
+
+    <div class="grid-2">
+      <form class="card" id="form-cadastro">
+        <h2>Cadastrar produto</h2>
+        <label>Nome do produto
+          <input type="text" name="nome" placeholder="Ex.: Mouse Gamer" required />
+        </label>
+        <label>Código de referência (único)
+          <input type="text" name="codigo" placeholder="Ex.: MOU-002" required />
+        </label>
+        <label>Quantidade inicial
+          <input type="number" name="quantidade" min="0" value="0" required />
+        </label>
+        <label>Preço (R$)
+          <input type="number" name="preco" min="0" step="0.01" value="0" required />
+        </label>
+        <div class="acoes">
+          <button type="submit">Salvar produto</button>
+        </div>
+      </form>
+
+      <form class="card" id="form-movimentar">
+        <h2>Entrada ou saída</h2>
+        <label>Produto (Código de referência)
+          <select name="codigo" id="select-codigo" required></select>
+        </label>
+        <label>Quantidade
+          <input type="number" name="quantidade" min="1" value="1" required />
+        </label>
+        <div class="acoes">
+          <button type="button" class="entrada" id="btn-entrada">+ Entrada</button>
+          <button type="button" class="saida" id="btn-saida">- Saída</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Estoque atual</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Nome</th>
+            <th>Código de referência</th>
+            <th>Quantidade</th>
+            <th>Preço</th>
+            <th>Atualizado em</th>
+          </tr>
+        </thead>
+        <tbody id="tabela-produtos"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const avisoEl = document.getElementById('aviso');
+    const tabelaEl = document.getElementById('tabela-produtos');
+    const selectCodigoEl = document.getElementById('select-codigo');
+
+    function mostrarAviso(texto, tipo = 'ok') {
+      avisoEl.textContent = texto;
+      avisoEl.className = tipo;
+    }
+
+    async function carregarProdutos() {
+      const res = await fetch('/api/produtos');
+      const produtos = await res.json();
+
+      selectCodigoEl.innerHTML = produtos.length
+        ? produtos.map(p => `<option value="${p.sku}">${p.sku} — ${p.nome} (${p.quantidade} un.)</option>`).join('')
+        : '<option value="">Nenhum produto cadastrado</option>';
+
+      tabelaEl.innerHTML = produtos.length
+        ? produtos.map(p => `
+            <tr>
+              <td>${p.id}</td>
+              <td>${p.nome}</td>
+              <td><strong>${p.sku}</strong></td>
+              <td>${p.quantidade}</td>
+              <td>R$ ${Number(p.preco).toFixed(2)}</td>
+              <td>${p.atualizado_em}</td>
+            </tr>
+          `).join('')
+        : '<tr><td colspan="6">Nenhum produto no estoque.</td></tr>';
+    }
+
+    document.getElementById('form-cadastro').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const body = Object.fromEntries(new FormData(e.target));
+      const res = await fetch('/api/produtos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (!res.ok) return mostrarAviso(data.erro, 'erro');
+      e.target.reset();
+      mostrarAviso(`Produto "${data.nome}" cadastrado com sucesso.`);
+      carregarProdutos();
+    });
+
+    async function movimentar(sinal) {
+      const codigo = selectCodigoEl.value;
+      const qtdInput = document.querySelector('#form-movimentar input[name="quantidade"]');
+      const qtd = Number(qtdInput.value);
+      if (!codigo) return mostrarAviso('Selecione um produto primeiro.', 'erro');
+
+      const res = await fetch('/api/movimentar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codigo, quantidade: qtd * sinal })
+      });
+      const data = await res.json();
+      if (!res.ok) return mostrarAviso(data.erro, 'erro');
+      mostrarAviso(`Saldo de "${data.nome}" atualizado para ${data.quantidade} unidades.`);
+      carregarProdutos();
+    }
+
+    document.getElementById('btn-entrada').addEventListener('click', () => movimentar(1));
+    document.getElementById('btn-saida').addEventListener('click', () => movimentar(-1));
+
+    carregarProdutos();
+  </script>
+</body>
+</html>
